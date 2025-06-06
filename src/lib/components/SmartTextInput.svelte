@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
 	import ColumnDropdown from './ColumnDropdown.svelte';
+	import EditChipModal from './EditChipModal.svelte';
 	import type { Column, ChipData } from '../types/column';
 
 	let {
@@ -23,7 +24,10 @@
 	let loading = $state(false);
 	let error = $state<string | null>(null);
 	let chips = $state<ChipData[]>([]);
-	let insertedColumnIds = $state<Set<string>>(new Set());
+	let insertedColumnPaths = $state<Set<string>>(new Set());
+	let draggedChip = $state<ChipData | null>(null);
+	let editingChip = $state<ChipData | null>(null);
+	let showEditModal = $state(false);
 
 	onMount(async () => {
 		try {
@@ -38,13 +42,32 @@
 	});
 
 	$effect(() => {
-		if (searchTerm) {
-			filteredColumns = columns.filter((col) =>
-				col.name.toLowerCase().includes(searchTerm.toLowerCase())
-			);
-		} else {
-			filteredColumns = columns;
+		if (columns.length === 0) {
+			filteredColumns = [];
+			return;
 		}
+
+		let filtered = columns;
+
+		if (searchTerm) {
+			filtered = filtered.filter(
+				(col) =>
+					col.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+					(col.subColumns &&
+						col.subColumns.some((sub) => sub.name.toLowerCase().includes(searchTerm.toLowerCase())))
+			);
+		}
+
+		filtered = filtered.filter((col) => {
+			const isMainColumnInserted = insertedColumnPaths.has(col.name);
+			const hasAvailableSubColumns =
+				col.subColumns &&
+				col.subColumns.some((sub) => !insertedColumnPaths.has(`${col.name}.${sub.name}`));
+
+			return !isMainColumnInserted || hasAvailableSubColumns;
+		});
+
+		filteredColumns = filtered;
 		selectedIndex = 0;
 	});
 
@@ -52,9 +75,7 @@
 		const selection = window.getSelection();
 		if (!selection || !editor) return;
 
-		const text = editor.textContent || '';
-
-		updateInsertedColumnIds();
+		updateInsertedColumnPaths();
 
 		const textBeforeCaret = getTextBeforeCaret();
 		const match = textBeforeCaret.match(/\/([^/\s]*)$/);
@@ -69,20 +90,20 @@
 		}
 	}
 
-	function updateInsertedColumnIds() {
+	function updateInsertedColumnPaths() {
 		if (!editor) return;
 
-		const chipElements = editor.querySelectorAll('[data-column-id]');
-		const newInsertedIds = new Set<string>();
+		const chipElements = editor.querySelectorAll('[data-column-path]');
+		const newInsertedPaths = new Set<string>();
 
 		chipElements.forEach((element) => {
-			const columnId = element.getAttribute('data-column-id');
-			if (columnId) {
-				newInsertedIds.add(columnId);
+			const columnPath = element.getAttribute('data-column-path');
+			if (columnPath) {
+				newInsertedPaths.add(columnPath);
 			}
 		});
 
-		insertedColumnIds = newInsertedIds;
+		insertedColumnPaths = newInsertedPaths;
 	}
 
 	function getTextBeforeCaret(): string {
@@ -96,7 +117,8 @@
 
 	async function openDropdown() {
 		if (columns.length === 0) {
-			error = 'No columns available';
+			error = 'No columns available to insert';
+			setTimeout(() => (error = null), 3000);
 			return;
 		}
 
@@ -140,7 +162,11 @@
 			case 'Enter':
 				event.preventDefault();
 				if (filteredColumns.length > 0 && selectedIndex < filteredColumns.length) {
-					insertColumn(filteredColumns[selectedIndex]);
+					const selectedColumn = filteredColumns[selectedIndex];
+					if (selectedColumn.subColumns && selectedColumn.subColumns.length > 0) {
+						return;
+					}
+					insertColumn(selectedColumn);
 				}
 				break;
 			case 'Escape':
@@ -150,8 +176,17 @@
 		}
 	}
 
-	async function insertColumn(column: Column) {
+	async function insertColumn(column: Column, subColumn?: Column) {
 		if (!editor) return;
+
+		const columnPath = subColumn ? `${column.name}.${subColumn.name}` : column.name;
+		const displayName = subColumn ? `${column.name}.${subColumn.name}` : column.name;
+
+		if (insertedColumnPaths.has(columnPath)) {
+			error = `"${displayName}" is already inserted`;
+			setTimeout(() => (error = null), 3000);
+			return;
+		}
 
 		const selection = window.getSelection();
 		if (!selection) return;
@@ -161,23 +196,20 @@
 		const match = textBeforeCaret.match(/\/([^/\s]*)$/);
 
 		if (match) {
-			const matchStart = textBeforeCaret.lastIndexOf('/' + match[1]);
-
 			const chipData: ChipData = {
 				id: `chip-${Date.now()}-${Math.random()}`,
 				column,
-				value: currentRow[column.name] || `[${column.name}]`
+				subColumn,
+				value: currentRow[columnPath] || `[${displayName}]`,
+				path: columnPath
 			};
 
-			const chipElement = createChipElement(column);
+			const chipElement = createChipElement(chipData);
 
 			let textNode = range.startContainer;
-			let offset = range.startOffset;
 
 			while (textNode && textNode.nodeType !== Node.TEXT_NODE) {
-				textNode = textNode?.firstChild as Node | null;
-				if (!textNode) break;
-				offset = 0;
+				textNode = textNode.firstChild;
 			}
 
 			if (textNode && textNode.nodeType === Node.TEXT_NODE) {
@@ -212,19 +244,20 @@
 
 			chips = [...chips, chipData];
 
-			updateInsertedColumnIds();
+			updateInsertedColumnPaths();
 
 			closeDropdown();
 			editor.focus();
 		}
 	}
 
-	function createChipElement(column: Column): HTMLElement {
+	function createChipElement(chipData: ChipData): HTMLElement {
 		const chipElement = document.createElement('span');
-		chipElement.setAttribute('data-column-id', column.id);
-		chipElement.setAttribute('data-column-name', column.name);
+		chipElement.setAttribute('data-column-id', chipData.column.id);
+		chipElement.setAttribute('data-column-path', chipData.path);
+		chipElement.setAttribute('data-chip-id', chipData.id);
 		chipElement.setAttribute('contenteditable', 'false');
-		chipElement.setAttribute('draggable', 'false');
+		chipElement.setAttribute('draggable', 'true');
 
 		chipElement.classList.add(
 			'inline-flex',
@@ -239,7 +272,10 @@
 			'font-medium',
 			'border',
 			'border-[#A4CCD9]',
-			'cursor-default'
+			'cursor-pointer',
+			'hover:bg-[#A4CCD9]',
+			'transition-colors',
+			'group'
 		);
 
 		const iconSpan = document.createElement('span');
@@ -255,18 +291,75 @@
 			'text-white',
 			'text-xs'
 		);
-		iconSpan.textContent = getColumnIcon(column.type);
+		iconSpan.textContent = getColumnIcon(chipData.subColumn?.type || chipData.column.type);
 		chipElement.appendChild(iconSpan);
 
 		const textSpan = document.createElement('span');
-		textSpan.textContent = column.name;
+		textSpan.textContent = chipData.subColumn
+			? `${chipData.column.name}.${chipData.subColumn.name}`
+			: chipData.column.name;
 		chipElement.appendChild(textSpan);
+
+		const editBtn = document.createElement('button');
+		editBtn.innerHTML = '✏️';
+		editBtn.classList.add(
+			'ml-1',
+			'text-gray-500',
+			'hover:text-gray-700',
+			'opacity-0',
+			'group-hover:opacity-100',
+			'transition-opacity',
+			'text-xs',
+			'w-4',
+			'h-4',
+			'flex',
+			'items-center',
+			'justify-center'
+		);
+		editBtn.onclick = (e) => {
+			e.stopPropagation();
+			editChip(chipData);
+		};
+		chipElement.appendChild(editBtn);
+
+		const removeBtn = document.createElement('button');
+		removeBtn.innerHTML = '×';
+		removeBtn.classList.add(
+			'ml-1',
+			'text-red-500',
+			'hover:text-red-700',
+			'opacity-0',
+			'group-hover:opacity-100',
+			'transition-opacity',
+			'text-sm',
+			'w-4',
+			'h-4',
+			'flex',
+			'items-center',
+			'justify-center'
+		);
+		removeBtn.onclick = (e) => {
+			e.stopPropagation();
+			removeChip(chipData.id);
+		};
+		chipElement.appendChild(removeBtn);
+
+		chipElement.ondragstart = (e) => {
+			draggedChip = chipData;
+			chipElement.classList.add('opacity-50');
+			e.dataTransfer?.setData('text/plain', chipData.id);
+		};
+
+		chipElement.ondragend = (e) => {
+			draggedChip = null;
+			chipElement.classList.remove('opacity-50');
+		};
 
 		return chipElement;
 	}
 
 	function getColumnIcon(type: string): string {
-		switch (type.toLowerCase()) {
+		switch (type?.toLowerCase()) {
 			case 'string':
 			case 'text':
 				return 'T';
@@ -290,32 +383,78 @@
 		}
 	}
 
+	function removeChip(chipId: string) {
+		if (!editor) return;
+
+		const chipElement = editor.querySelector(`[data-chip-id="${chipId}"]`);
+		if (chipElement) {
+			chipElement.remove();
+		}
+
+		chips = chips.filter((chip) => chip.id !== chipId);
+
+		updateInsertedColumnPaths();
+
+		editor.focus();
+	}
+
+	function editChip(chipData: ChipData) {
+		editingChip = chipData;
+		showEditModal = true;
+	}
+
+	function saveEditedChip(newValue: string) {
+		if (!editingChip || !editor) return;
+
+		chips = chips.map((chip) =>
+			chip.id === editingChip!.id ? { ...chip, value: newValue } : chip
+		);
+
+		const chipElement = editor.querySelector(`[data-chip-id="${editingChip.id}"]`);
+		if (chipElement) {
+			const textSpan = chipElement.querySelector('span:nth-child(2)');
+			if (textSpan) {
+				textSpan.textContent = newValue;
+			}
+		}
+
+		showEditModal = false;
+		editingChip = null;
+		editor.focus();
+	}
+
+	function handleDragOver(event: DragEvent) {
+		if (draggedChip) {
+			event.preventDefault();
+		}
+	}
+
+	function handleDrop(event: DragEvent) {
+		if (!draggedChip || !editor) return;
+
+		event.preventDefault();
+
+		const range = document.caretRangeFromPoint(event.clientX, event.clientY);
+		if (range) {
+			const draggedElement = editor.querySelector(`[data-chip-id="${draggedChip.id}"]`);
+			if (draggedElement) {
+				draggedElement.remove();
+			}
+
+			const newChipElement = createChipElement(draggedChip);
+			range.insertNode(newChipElement);
+
+			const spaceNode = document.createTextNode(' ');
+			newChipElement.parentNode?.insertBefore(spaceNode, newChipElement.nextSibling);
+		}
+
+		draggedChip = null;
+	}
+
 	function handlePaste(event: ClipboardEvent) {
 		event.preventDefault();
 		const text = event.clipboardData?.getData('text/plain') || '';
 		document.execCommand('insertText', false, text);
-	}
-
-	function getContentAsText(): string {
-		if (!editor) return '';
-
-		let result = '';
-		const walker = document.createTreeWalker(editor, NodeFilter.SHOW_ALL, null);
-
-		let node;
-		while ((node = walker.nextNode())) {
-			if (node.nodeType === Node.TEXT_NODE) {
-				result += node.textContent;
-			} else if (node.nodeType === Node.ELEMENT_NODE) {
-				const element = node as HTMLElement;
-				if (element.hasAttribute('data-column-name')) {
-					const columnName = element.getAttribute('data-column-name');
-					result += `[${columnName}]`;
-				}
-			}
-		}
-
-		return result;
 	}
 </script>
 
@@ -332,6 +471,8 @@
 			oninput={handleInput}
 			onkeydown={handleKeyDown}
 			onpaste={handlePaste}
+			ondragover={handleDragOver}
+			ondrop={handleDrop}
 			data-placeholder={placeholder}
 		></div>
 	</div>
@@ -342,8 +483,20 @@
 			position={dropdownPosition}
 			{selectedIndex}
 			{searchTerm}
+			insertedPaths={insertedColumnPaths}
 			onSelect={insertColumn}
 			onClose={closeDropdown}
+		/>
+	{/if}
+
+	{#if showEditModal && editingChip}
+		<EditChipModal
+			chip={editingChip}
+			onSave={saveEditedChip}
+			onCancel={() => {
+				showEditModal = false;
+				editingChip = null;
+			}}
 		/>
 	{/if}
 
@@ -357,18 +510,34 @@
 	{/if}
 
 	{#if error}
-		<div class="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1 text-sm text-red-600">
+		<div
+			class="mt-2 flex items-center gap-2 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600"
+		>
+			<svg class="h-4 w-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+				<path
+					fill-rule="evenodd"
+					d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+					clip-rule="evenodd"
+				/>
+			</svg>
 			{error}
 		</div>
 	{/if}
 
-	<div class="flex justify-between">
-		<small class="text-xs text-gray-500 pt-2">
-			Type <span class="px-2 py-1 bg-[#8dbcc756] font-bold text-[#000]">/</span> to insert a Column
-		</small>
+	<div class="mt-1 flex justify-between">
+		<div>
+			<small class="pt-2 text-xs text-gray-500">
+				Type <span class="bg-[#8dbcc756] px-2 py-1 font-bold text-[#000]">/</span> to insert a Column
+			</small>
+			<small class="pt-2 text-[10px] text-gray-500">
+				{#if insertedColumnPaths.size > 0}
+					( <span class="text-[#8DBCC7]">Hover chips to edit/delete • Drag to reorder</span> )
+				{/if}
+			</small>
+		</div>
 
-		<small class="text-[10px] pt-2 text-gray-500">
-			{insertedColumnIds.size} column{insertedColumnIds.size !== 1 ? 's' : ''} inserted • {columns.length}
+		<small class="pt-2 text-[10px] text-gray-500">
+			{insertedColumnPaths.size} column{insertedColumnPaths.size !== 1 ? 's' : ''} inserted • {columns.length}
 			available
 		</small>
 	</div>

@@ -7,14 +7,18 @@
 		position: { top: number; left: number };
 		selectedIndex: number;
 		searchTerm: string;
-		onSelect: (column: Column) => void;
+		insertedPaths: Set<string>;
+		onSelect: (column: Column, subColumn?: Column) => void;
 		onClose: () => void;
 	}
 
-	let { columns, position, selectedIndex, searchTerm, onSelect, onClose }: Props = $props();
+	let { columns, position, selectedIndex, searchTerm, insertedPaths, onSelect, onClose }: Props =
+		$props();
 
 	let dropdownElement = $state<HTMLDivElement | null>(null);
+	let expandedColumns = $state<Set<string>>(new Set());
 
+	// Handle click outside to close dropdown
 	function handleClickOutside(event: MouseEvent) {
 		const target = event.target as Node;
 
@@ -23,15 +27,6 @@
 		}
 	}
 
-	$effect(() => {
-		if (dropdownElement && selectedIndex >= 0) {
-			const selectedElement = dropdownElement.querySelector(`[data-index="${selectedIndex}"]`);
-			if (selectedElement) {
-				selectedElement.scrollIntoView({ block: 'nearest' });
-			}
-		}
-	});
-
 	onMount(() => {
 		document.addEventListener('click', handleClickOutside);
 		return () => {
@@ -39,27 +34,8 @@
 		};
 	});
 
-	const groupedColumns = $derived.by(() => {
-		const groups: Record<string, Column[]> = {};
-
-		if (searchTerm) {
-			return { 'Matching Columns': columns };
-		}
-
-		columns.forEach((column) => {
-			const type = column.type || 'other';
-			const groupName = type.charAt(0).toUpperCase() + type.slice(1);
-			if (!groups[groupName]) {
-				groups[groupName] = [];
-			}
-			groups[groupName].push(column);
-		});
-
-		return groups;
-	});
-
 	function getColumnIcon(type: string): string {
-		switch (type.toLowerCase()) {
+		switch (type?.toLowerCase()) {
 			case 'string':
 			case 'text':
 				return 'T';
@@ -82,94 +58,130 @@
 				return 'T';
 		}
 	}
+
+	function toggleColumn(columnId: string) {
+		const newExpanded = new Set(expandedColumns);
+		if (newExpanded.has(columnId)) {
+			newExpanded.delete(columnId);
+		} else {
+			newExpanded.add(columnId);
+		}
+		expandedColumns = newExpanded;
+	}
+
+	function isAvailable(column: Column, subColumn?: Column): boolean {
+		const path = subColumn ? `${column.name}.${subColumn.name}` : column.name;
+		return !insertedPaths.has(path);
+	}
+
+	function getAvailableSubColumnsCount(column: Column): number {
+		if (!column.subColumns) return 0;
+		return column.subColumns.filter((sub) => isAvailable(column, sub)).length;
+	}
 </script>
 
 <div
 	bind:this={dropdownElement}
-	class="absolute z-50 max-h-80 w-72 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg"
+	class="absolute z-50 max-h-80 w-80 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg"
 	style="top: {position.top}px; left: {position.left}px;"
 >
-	{#if searchTerm}
-		<div class="sticky top-0 border-b border-gray-200 bg-[#EBFFD8] px-3 py-2">
-			<div class="text-sm text-gray-700">
+	<div class="sticky top-0 border-b border-gray-200 bg-[#EBFFD8] px-3 py-2">
+		<div class="text-sm font-medium text-gray-700">
+			{#if searchTerm}
 				Search: "{searchTerm}" ({columns.length} found)
-			</div>
-		</div>
-	{:else}
-		<div class="sticky top-0 border-b border-gray-200 bg-[#EBFFD8] px-3 py-2">
-			<div class="text-sm font-medium text-gray-700">
+			{:else}
 				Insert column ({columns.length} available)
-			</div>
+			{/if}
 		</div>
-	{/if}
+	</div>
 
 	{#if columns.length === 0}
 		<div class="p-4 text-center text-gray-500">
 			{#if searchTerm}
 				No columns match "{searchTerm}"
 			{:else}
-				No columns found
+				No columns available
 			{/if}
 		</div>
-	{:else if searchTerm}
+	{:else}
 		<div class="py-1">
 			{#each columns as column, index}
-				<button
-					type="button"
-					data-index={index}
-					class="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[#EBFFD8]/50"
-					class:bg-[#C4E1E6]={index === selectedIndex}
-					onclick={() => onSelect(column)}
-				>
-					<span
-						class="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-[#8DBCC7] text-xs text-white"
-					>
-						{getColumnIcon(column.type)}
-					</span>
-					<span class="truncate text-sm">{column.name}</span>
-				</button>
+				<div class="border-b border-gray-100 last:border-b-0">
+					<div class="flex items-center">
+						<button
+							type="button"
+							class="flex flex-1 items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[#EBFFD8]/50"
+							class:bg-[#C4E1E6]={index === selectedIndex && !column.subColumns}
+							class:opacity-50={!isAvailable(column)}
+							onclick={() => {
+								if (column.subColumns && column.subColumns.length > 0) {
+									toggleColumn(column.id);
+								} else if (isAvailable(column)) {
+									onSelect(column);
+								}
+							}}
+							disabled={!isAvailable(column) &&
+								(!column.subColumns || getAvailableSubColumnsCount(column) === 0)}
+						>
+							<span
+								class="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-[#8DBCC7] text-xs text-white"
+							>
+								{getColumnIcon(column.type)}
+							</span>
+							<span class="flex-1 truncate text-sm">{column.name}</span>
+
+							{#if !isAvailable(column)}
+								<span class="rounded bg-gray-100 px-1 text-xs text-gray-400">inserted</span>
+							{/if}
+
+							{#if column.subColumns && column.subColumns.length > 0}
+								<span class="rounded bg-gray-100 px-1 text-xs text-gray-500">
+									{getAvailableSubColumnsCount(column)}/{column.subColumns.length}
+								</span>
+								<span class="text-xs text-gray-400">
+									{expandedColumns.has(column.id) ? '▼' : '▶'}
+								</span>
+							{/if}
+						</button>
+					</div>
+
+					{#if column.subColumns && expandedColumns.has(column.id)}
+						<div class="border-t border-gray-200 bg-gray-50">
+							{#each column.subColumns as subColumn}
+								<button
+									type="button"
+									class="flex w-full items-center gap-2 px-6 py-2 text-left transition-colors hover:bg-[#EBFFD8]/50"
+									class:opacity-50={!isAvailable(column, subColumn)}
+									onclick={() => {
+										if (isAvailable(column, subColumn)) {
+											onSelect(column, subColumn);
+										}
+									}}
+									disabled={!isAvailable(column, subColumn)}
+								>
+									<span
+										class="inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded bg-[#A4CCD9] text-xs text-white"
+									>
+										{getColumnIcon(subColumn.type)}
+									</span>
+									<span class="truncate text-sm">{subColumn.name}</span>
+
+									{#if !isAvailable(column, subColumn)}
+										<span class="rounded bg-gray-100 px-1 text-xs text-gray-400">inserted</span>
+									{/if}
+								</button>
+							{/each}
+						</div>
+					{/if}
+				</div>
 			{/each}
 		</div>
-	{:else}
-		{#each Object.entries(groupedColumns) as [groupName, groupColumns]}
-			<div class="py-1">
-				<div class="sticky top-8 bg-gray-50 px-3 py-1 text-xs font-medium text-gray-500">
-					{groupName} ({groupColumns.length})
-				</div>
-				{#each groupColumns as column, groupIndex}
-					{@const index = columns.findIndex((c) => c.id === column.id)}
-					<button
-						type="button"
-						data-index={index}
-						class="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[#EBFFD8]/50"
-						class:bg-[#C4E1E6]={index === selectedIndex}
-						onclick={() => onSelect(column)}
-					>
-						<span
-							class="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-[#8DBCC7] text-xs text-white"
-						>
-							{getColumnIcon(column.type)}
-						</span>
-						<span class="truncate text-sm">{column.name}</span>
-					</button>
-				{/each}
-			</div>
-		{/each}
 	{/if}
 
-	{#if columns.length > 1 && !searchTerm}
-		<div class="border-t border-gray-200">
-			<button
-				type="button"
-				class="flex w-full items-center gap-2 px-3 py-2 text-left font-medium text-[#8DBCC7] hover:bg-[#EBFFD8]/50"
-				onclick={() => {
-					columns.forEach((column, index) => {
-						setTimeout(() => onSelect(column), index * 100);
-					});
-				}}
-			>
-				<span class="text-sm">Insert all {columns.length} columns</span>
-			</button>
+	<div class="sticky bottom-0 border-t border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-500">
+		<div class="flex items-center justify-between">
+			<span>Click to expand • Enter to select</span>
+			<span>ESC to close</span>
 		</div>
-	{/if}
+	</div>
 </div>
