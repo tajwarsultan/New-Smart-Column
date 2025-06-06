@@ -362,9 +362,15 @@
 		</div>
 	{/if}
 
-	<div class="mt-2 text-xs text-gray-500">
-		{insertedColumnIds.size} column{insertedColumnIds.size !== 1 ? 's' : ''} inserted • {columns.length}
-		available
+	<div class="flex justify-between">
+		<small class="text-xs text-gray-500 pt-2">
+			Type <span class="px-2 py-1 bg-[#8dbcc756] font-bold text-[#000]">/</span> to insert a Column
+		</small>
+
+		<small class="text-[10px] pt-2 text-gray-500">
+			{insertedColumnIds.size} column{insertedColumnIds.size !== 1 ? 's' : ''} inserted • {columns.length}
+			available
+		</small>
 	</div>
 </div>
 
