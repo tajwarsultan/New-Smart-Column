@@ -1,0 +1,87 @@
+import type { Column } from '../types/column';
+
+export const mockColumns: Column[] = [
+	{ id: 'col1', name: 'First Name', type: 'string' },
+	{ id: 'col2', name: 'Last Name', type: 'string' },
+	{ id: 'col3', name: 'Full Name', type: 'string' },
+	{ id: 'col4', name: 'Email', type: 'email' },
+	{ id: 'col5', name: 'Phone', type: 'phone' },
+	{ id: 'col6', name: 'Age', type: 'number' },
+	{ id: 'col7', name: 'Gender', type: 'string' },
+	{ id: 'col8', name: 'Date of Birth', type: 'date' },
+	{ id: 'col9', name: 'Marital Status', type: 'string' },
+
+	{ id: 'col10', name: 'Address', type: 'string' },
+	{ id: 'col11', name: 'City', type: 'string' },
+	{ id: 'col12', name: 'State', type: 'string' },
+	{ id: 'col13', name: 'Country', type: 'string' },
+	{ id: 'col14', name: 'Zip Code', type: 'string' },
+
+	{ id: 'col15', name: 'Company', type: 'string' },
+	{ id: 'col16', name: 'Job Title', type: 'string' },
+	{ id: 'col17', name: 'Department', type: 'string' },
+	{ id: 'col18', name: 'Manager', type: 'string' },
+	{ id: 'col19', name: 'Start Date', type: 'date' },
+	{ id: 'col20', name: 'Salary', type: 'number' },
+	{ id: 'col21', name: 'Industry', type: 'string' },
+	{ id: 'col22', name: 'Experience', type: 'string' },
+	{ id: 'col23', name: 'Skills', type: 'string' },
+	{ id: 'col24', name: 'Education', type: 'string' },
+	{ id: 'col25', name: 'Certifications', type: 'string' },
+
+	{ id: 'col26', name: 'LinkedIn Profile URL', type: 'url' },
+	{ id: 'col27', name: 'LinkedIn Profile', type: 'string' },
+	{ id: 'col28', name: 'Website', type: 'url' },
+	{ id: 'col29', name: 'GitHub', type: 'url' },
+	{ id: 'col30', name: 'Twitter', type: 'url' },
+	{ id: 'col31', name: 'Facebook', type: 'url' },
+	{ id: 'col32', name: 'Instagram', type: 'url' },
+
+	{ id: 'col33', name: 'Languages', type: 'string' },
+	{ id: 'col34', name: 'Projects', type: 'string' },
+	{ id: 'col35', name: 'Summary', type: 'text' },
+	{ id: 'col36', name: 'Bio', type: 'text' },
+	{ id: 'col37', name: 'Notes', type: 'text' },
+	{ id: 'col38', name: 'Tags', type: 'string' },
+	{ id: 'col39', name: 'Category', type: 'string' },
+	{ id: 'col40', name: 'Status', type: 'string' },
+
+	{ id: 'col41', name: 'Emergency Contact', type: 'string' },
+	{ id: 'col42', name: 'Emergency Phone', type: 'phone' },
+	{ id: 'col43', name: 'Work Phone', type: 'phone' },
+	{ id: 'col44', name: 'Mobile Phone', type: 'phone' },
+	{ id: 'col45', name: 'Work Email', type: 'email' },
+	{ id: 'col46', name: 'Personal Email', type: 'email' },
+
+	{ id: 'col47', name: 'Blood Type', type: 'string' },
+	{ id: 'col48', name: 'Allergies', type: 'string' },
+	{ id: 'col49', name: 'Medical Conditions', type: 'string' },
+	{ id: 'col50', name: 'Insurance Provider', type: 'string' },
+
+	{ id: 'col51', name: 'Bank Account', type: 'string' },
+	{ id: 'col52', name: 'Tax ID', type: 'string' },
+	{ id: 'col53', name: 'Credit Score', type: 'number' },
+	{ id: 'col54', name: 'Annual Income', type: 'number' },
+
+	{ id: 'col55', name: 'Preferred Language', type: 'string' },
+	{ id: 'col56', name: 'Time Zone', type: 'string' },
+	{ id: 'col57', name: 'Communication Preference', type: 'string' },
+	{ id: 'col58', name: 'Work Style', type: 'string' },
+
+	{ id: 'col59', name: 'Created At', type: 'datetime' },
+	{ id: 'col60', name: 'Updated At', type: 'datetime' },
+	{ id: 'col61', name: 'Last Login', type: 'datetime' },
+	{ id: 'col62', name: 'Last Contact', type: 'date' },
+
+	{ id: 'col63', name: 'Is Active', type: 'boolean' },
+	{ id: 'col64', name: 'Email Verified', type: 'boolean' },
+	{ id: 'col65', name: 'Phone Verified', type: 'boolean' },
+	{ id: 'col66', name: 'Newsletter Subscribed', type: 'boolean' },
+	{ id: 'col67', name: 'Marketing Consent', type: 'boolean' },
+
+	{ id: 'col68', name: 'Custom Field 1', type: 'string' },
+	{ id: 'col69', name: 'Custom Field 2', type: 'string' },
+	{ id: 'col70', name: 'Custom Field 3', type: 'number' },
+	{ id: 'col71', name: 'Custom Field 4', type: 'date' },
+	{ id: 'col72', name: 'Custom Field 5', type: 'boolean' }
+];
